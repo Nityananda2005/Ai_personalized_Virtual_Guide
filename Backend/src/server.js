@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const chatRoutes = require('./routes/chat.routes');
-const documentRoutes = require('./routes/document.routes');
+// const documentRoutes = require('./routes/document.routes');
 const voiceRoutes = require('./routes/voice.routes');
 const userRoutes = require('./routes/user.routes');
 const studyRoutes = require('./routes/study.routes');
@@ -32,7 +32,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // API Routes
 app.use('/api', chatRoutes);
-app.use('/api/document', documentRoutes);
+// app.use('/api/document', documentRoutes);
 app.use('/api/voice', voiceRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/study', studyRoutes);
