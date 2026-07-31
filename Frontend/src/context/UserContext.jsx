@@ -1,0 +1,122 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { checkHealth, getUserProfile as apiGetUserProfile, saveUserProfile as apiSaveUserProfile } from '../services/api';
+
+const UserContext = createContext();
+
+export const UserProvider = ({ children }) => {
+  const [userId, setUserId] = useState(() => localStorage.getItem('vg_userId') || 'student_demo');
+  const [language, setLanguageState] = useState(() => localStorage.getItem('vg_language') || 'en');
+  const [profile, setProfile] = useState(null);
+  const [isHealthOk, setIsHealthOk] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (message, type = 'info') => {
+    setToastMessage({ message, type, id: Date.now() });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  const setLanguage = (lang) => {
+    setLanguageState(lang);
+    localStorage.setItem('vg_language', lang);
+  };
+
+  const setUserIdAndSave = (id) => {
+    if (!id || id.trim() === '') return;
+    const cleanId = id.trim();
+    setUserId(cleanId);
+    localStorage.setItem('vg_userId', cleanId);
+  };
+
+  // Check Backend health on load
+  useEffect(() => {
+    const verifyBackend = async () => {
+      const res = await checkHealth();
+      if (res && res.status === 'OK') {
+        setIsHealthOk(true);
+      } else {
+        setIsHealthOk(false);
+      }
+    };
+    verifyBackend();
+    const interval = setInterval(verifyBackend, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch user profile whenever userId changes
+  useEffect(() => {
+    if (!userId) return;
+    const loadProfile = async () => {
+      setLoadingProfile(true);
+      try {
+        const res = await apiGetUserProfile(userId);
+        if (res && res.success && res.profile) {
+          setProfile(res.profile);
+          if (res.profile.preferredLanguage) {
+            setLanguageState(res.profile.preferredLanguage);
+            localStorage.setItem('vg_language', res.profile.preferredLanguage);
+          }
+        } else {
+          setProfile(null);
+        }
+      } catch (err) {
+        // Profile not created yet for this userId — 404 is expected, ignore silently
+        if (err?.response?.status !== 404) {
+          console.warn('[UserContext] Unexpected error loading profile:', err.message);
+        }
+        setProfile(null);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    loadProfile();
+  }, [userId]);
+
+  const saveProfile = async (profileData) => {
+    setLoadingProfile(true);
+    try {
+      const fullData = { ...profileData, userId };
+      const res = await apiSaveUserProfile(fullData);
+      if (res && res.success) {
+        setProfile(res.profile);
+        showToast('Profile saved & synchronized with AI model!', 'success');
+        return true;
+      }
+      throw new Error(res.error || 'Failed to save profile');
+    } catch (err) {
+      showToast(err.message || 'Error saving profile', 'error');
+      return false;
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  return (
+    <UserContext.Provider
+      value={{
+        userId,
+        setUserId: setUserIdAndSave,
+        language,
+        setLanguage,
+        profile,
+        saveProfile,
+        loadingProfile,
+        isHealthOk,
+        toastMessage,
+        showToast,
+      }}
+    >
+      {children}
+    </UserContext.Provider>
+  );
+};
+
+export const useUser = () => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error('useUser must be used within a UserProvider');
+  }
+  return context;
+};
